@@ -33,8 +33,8 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: docker/Dockerfile
+          context: ./devops_szorzotabla
+          file: ./devops_szorzotabla/docker/Dockerfile
           push: true
           tags: |
             ghcr.io/${{ env.REPO_OWNER }}/multiplication-app:${{ env.TAG }}
@@ -51,7 +51,7 @@ jobs:
       - name: Update manifest tag
         run: |
           OWNER=$(echo "${{ env.REPO_OWNER }}" | tr '[:upper:]' '[:lower:]')
-          sed -i -E "s|(ghcr.io/${OWNER}/multiplication-app):[a-zA-Z0-9_.-]+|\1:${{ env.TAG }}|g" k8s/app-deployment.yaml
+          sed -i -E "s|(ghcr.io/${OWNER}/vizsgaremek-skillstree-app):[a-zA-Z0-9_.-]+|\1:${{ env.TAG }}|g" ./devops_szorzotabla/k8s/app-deployment.yaml
 
       - name: Deploy
         run: |
@@ -67,4 +67,4 @@ jobs:
             --from-literal=APP_KEY="${{ secrets.APP_KEY }}" \
             --dry-run=client -o yaml | kubectl apply -f -
           
-          kubectl apply -f k8s/app-deployment.yaml
+          kubectl apply -f ./devops_szorzotabla/k8s/app-deployment.yaml
