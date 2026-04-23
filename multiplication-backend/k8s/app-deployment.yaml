@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: multiplication-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: multiplication-backend
+  template:
+    metadata:
+      labels:
+        app: multiplication-backend
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      containers:
+        - name: laravel-app
+          image: ghcr.io/bicskey-balazs/multiplication-app:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          env:
+            - name: APP_ENV
+              value: production
+            - name: APP_DEBUG
+              value: "false"
+            - name: APP_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: multiplication-secrets
+                  key: APP_KEY
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: multiplication-backend-svc
+spec:
+  type: ClusterIP
+  selector:
+    app: multiplication-backend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: multiplication-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: multiplication-backend.jcloud.jedlik.cloud
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: multiplication-backend-svc
+                port:
+                  number: 80

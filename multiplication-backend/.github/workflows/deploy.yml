@@ -1,0 +1,70 @@
+name: Deploy to Jedlik Cloud
+
+on:
+  push:
+    branches: [backend-deployment]
+  workflow_dispatch: {}
+
+env:
+  K8S_NAMESPACE: multiplication-backend
+  REPO_OWNER: ${{ github.repository_owner }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set Image Tag
+        run: echo "TAG=$(echo ${GITHUB_SHA} | cut -c1-7)" >> $GITHUB_ENV
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ env.REPO_OWNER }}/multiplication-app:${{ env.TAG }}
+            ghcr.io/${{ env.REPO_OWNER }}/multiplication-app:latest
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Decode KUBECONFIG
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 --decode > $HOME/.kube/config
+
+      - name: Update manifest tag
+        run: |
+          OWNER=$(echo "${{ env.REPO_OWNER }}" | tr '[:upper:]' '[:lower:]')
+          sed -i -E "s|(ghcr.io/${OWNER}/multiplication-app):[a-zA-Z0-9_.-]+|\1:${{ env.TAG }}|g" k8s/app-deployment.yaml
+
+      - name: Deploy
+        run: |
+          export KUBECONFIG=$HOME/.kube/config
+
+          kubectl create secret docker-registry ghcr-pull-secret \
+            --docker-server=ghcr.io \
+            --docker-username="${{ github.actor }}" \
+            --docker-password="${{ secrets.GH_PAT }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl create secret generic multiplication-secrets \
+            --from-literal=APP_KEY="${{ secrets.APP_KEY }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+          
+          kubectl apply -f k8s/app-deployment.yaml
